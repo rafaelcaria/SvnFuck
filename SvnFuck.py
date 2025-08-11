@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import requests
-import sqlite3,os,re,sys
-from lib.util import cprint,rmakedirs,calcSize,rdir,header
+import sqlite3
+import os
+import re
+import sys
 import time
+from lib.util import cprint, rmakedirs, calcSize, rdir, header
 
 class SvnFuck(object):
     
@@ -30,21 +33,14 @@ class SvnFuck(object):
     """)
         return
     
-    def resolveHost(self,host):
+    def resolveHost(self, host):
         '''Resolve address entered by user'''
         host = host.strip()
-        #reg = re.compile(r'(?:http(?:s?):\/\/)?(?:[\w-]+\.)+(?:\w+)(?::\d+)?/?')
-        #hosts = reg.findall(host)
-        #if len(hosts) == 0:
-        #    cprint('[!] Host Error, Please input correct host address.', 'red')
-        #    cprint('[-] Your input:{}'.format(host),'red')
-        #    sys.exit()
-        #host = hosts[0]
         host = host[:host.index('.svn')]
         if not host.startswith('http'):
-            host = 'http://'+host
+            host = 'http://' + host
         if not host.endswith('/'):
-            host = host+'/'
+            host = host + '/'
         return host
     
     def makeFilePath(self):
@@ -54,28 +50,29 @@ class SvnFuck(object):
         if not os.path.exists('data'):
             os.makedirs('data')
         date = int(time.time())
-        os.makedirs('data/{}_{}'.format(path,date))
-        return os.path.abspath('data/{}_{}'.format(path,date))+'/'
+        dir_path = 'data/{}_{}'.format(path, date)
+        os.makedirs(dir_path)
+        return os.path.abspath(dir_path) + '/'
     
     def downloadWc_db(self):
         '''Download wc.db'''
-        dbUrl = self.__SVN_HOST+".svn/wc.db"
-        res = requests.get(dbUrl,headers=header)
+        dbUrl = self.__SVN_HOST + ".svn/wc.db"
+        res = requests.get(dbUrl, headers=header)
         
         if res.status_code != 200:
-            cprint('[!] Download Error: HTTP Status {} Error.'.format(res.status_code),'red')
-            cprint('[-] Please check if {} is accessible.'.format(dbUrl),'red')
+            cprint('[!] Download Error: HTTP Status {} Error.'.format(res.status_code), 'red')
+            cprint('[-] Please check if {} is accessible.'.format(dbUrl), 'red')
             sys.exit()
         
-        with open(self.__FILE_PATH+'wb.db','wb+') as f:
+        with open(self.__FILE_PATH + 'wb.db', 'wb+') as f:
             f.write(res.content)
         return
     
     def resolveWc_db(self):
         '''
-            @return: [(path,kind,checksum,size)]
+            @return: [(path, kind, checksum, size)]
         '''
-        path = self.__FILE_PATH+'wb.db'
+        path = self.__FILE_PATH + 'wb.db'
         res = []
         try:
             conn = sqlite3.connect(path)
@@ -93,67 +90,66 @@ class SvnFuck(object):
                 tp[i[0]] = i[1]
             
             for i in nodes:
-                if i[2] != None and i[2] in tp:
-                    res.append((i[0],i[1],i[2],tp.pop(i[2])))
+                if i[2] is not None and i[2] in tp:
+                    res.append((i[0], i[1], i[2], tp.pop(i[2])))
                 else:
-                    res.append((i[0],i[1],i[2],0))
+                    res.append((i[0], i[1], i[2], 0))
             
             for i in tp:
-                res.append(('Unkown_'+i,'file',i,tp[i]))
+                res.append(('Unkown_' + i, 'file', i, tp[i]))
         except BaseException as e:
             print(e)
-            cprint('[-] Open {} failed.'.format(path),'red')
+            cprint('[-] Open {} failed.'.format(path), 'red')
         return res
     
-    def downFile(self,task):
+    def downFile(self, task):
         '''Download file from server'''
         if self.flag:
             path = self.__FILE_PATH
             if task[1] == 'dir':
-                rmakedirs(path+task[0])
+                rmakedirs(path + task[0])
             else:
-                if task[2] == None:
-                    # file was been deleted.
-                    with open(path+task[0]+'(deleted)','wb+') as f:
+                if task[2] is None:
+                    # file was deleted
+                    with open(path + task[0] + '(deleted)', 'wb+') as f:
                         pass
-                    cprint('[+] Found a deleted file. Name:{}'.format(task[0]),'green')
+                    cprint('[+] Found a deleted file. Name:{}'.format(task[0]), 'green')
                     return
                 # checksum = $sha1$xx...
                 checksum = task[2][6:]
-                fileUrl = self.__SVN_HOST+'.svn/pristine/'+checksum[:2]+'/'+checksum+'.svn-base'
+                fileUrl = self.__SVN_HOST + '.svn/pristine/' + checksum[:2] + '/' + checksum + '.svn-base'
                 
                 try:
-                    r = requests.get(fileUrl,headers=header)
-                    
+                    r = requests.get(fileUrl, headers=header)
                     if r.status_code != 200:
                         raise BaseException('HTTP status isn\'t 200')
                 except:
                     # Download file failed
-                    cprint('[-] Download {} Failed.Url:{}'.format(task[0],fileUrl),'red')
+                    cprint('[-] Download {} Failed.Url:{}'.format(task[0], fileUrl), 'red')
                     return
-                fpath = os.path.join(path,task[0])
+                fpath = os.path.join(path, task[0])
                 try:
-                    os.makedirs(os.path.dirname(fpath))
+                    os.makedirs(os.path.dirname(fpath), exist_ok=True)
                 except:
                     pass
-                with open(fpath,'wb+') as f:
+                with open(fpath, 'wb+') as f:
                     f.write(r.content)
                 size = calcSize(int(task[3]))
-                cprint('[+] Download {} Success. File size {}'.format(task[0],size),'green')
+                cprint('[+] Download {} Success. File size {}'.format(task[0], size), 'green')
         else:
             try:
-                r = requests.get(task[0],headers=header)
-    
+                r = requests.get(task[0], headers=header)
                 if r.status_code != 200:
                     raise BaseException('HTTP status isn\'t 200')
             except:
-                # Download file failed
-                cprint('[-] Download {} Failed.Url:{}'.format(task[0],fileUrl),'red')
+                cprint('[-] Download {} Failed.Url:{}'.format(task[0], task[0]), 'red')
                 return
-            with open(self.__FILE_PATH+task[1],'wb+') as f:
-                f.writer(r.content)
+            fpath = os.path.join(self.__FILE_PATH, task[1])
+            os.makedirs(os.path.dirname(fpath), exist_ok=True)
+            with open(fpath, 'wb+') as f:
+                f.write(r.content)
             size = calcSize(len(r.content))
-            cprint('[+] Download {} Success. File size {}'.format(task[0],size),'green')
+            cprint('[+] Download {} Success. File size {}'.format(task[0], size), 'green')
             
         return
     
@@ -161,46 +157,46 @@ class SvnFuck(object):
         '''
             @return: True if version > 1.7, False for others
         '''
-        url = self.__SVN_HOST+'.svn/entries'
-        res = requests.get(url,headers=header)
-        rmakedirs(self.__FILE_PATH+'.svn/')
-        with open(self.__FILE_PATH+'.svn/entries','wb+') as f:
+        url = self.__SVN_HOST + '.svn/entries'
+        res = requests.get(url, headers=header)
+        rmakedirs(self.__FILE_PATH + '.svn/')
+        with open(self.__FILE_PATH + '.svn/entries', 'wb+') as f:
             f.write(res.content)
     
         if res.status_code != 200:
-            cprint('[!] Download Error: HTTP Status {} Error.'.format(res.status_code),'red')
-            cprint('[-] Please check if {} is accessible.'.format(url),'red')
+            cprint('[!] Download Error: HTTP Status {} Error.'.format(res.status_code), 'red')
+            cprint('[-] Please check if {} is accessible.'.format(url), 'red')
             sys.exit()
         if res.content == b'12\n':
             return True
         return False
             
     
-    def resolveEntries(self,url,pre=''):
+    def resolveEntries(self, url, pre=''):
         '''Recursively parse /.svn/entries to get all file paths'''
-        r = requests.get(url,headers=header)
+        r = requests.get(url, headers=header)
         lists = r.text.split('\n')
-        for task,i in zip(lists,range(len(lists))):
+        for task, i in zip(lists, range(len(lists))):
             if task == 'file':
                 if lists[i-1]:
                     if pre:
-                        self.downFile((self.__SVN_HOST+pre+'/.svn/text-base/'+lists[i-1]+'.svn-base',pre+'/'+lists[i-1]))
+                        self.downFile((self.__SVN_HOST + pre + '/.svn/text-base/' + lists[i-1] + '.svn-base', pre + '/' + lists[i-1]))
                     else:
-                        self.downFile((self.__SVN_HOST+'/.svn/text-base/'+lists[i-1]+'.svn-base',lists[i-1]))
+                        self.downFile((self.__SVN_HOST + '.svn/text-base/' + lists[i-1] + '.svn-base', lists[i-1]))
             elif task == 'dir':
                 if lists[i-1]:
                     if pre:
-                        rmakedirs(self.__FILE_PATH+pre+'/'+lists[i-1])
-                        self.resolveEntries(self.__SVN_HOST+pre+'/'+lists[i-1]+'/.svn/entries',pre+'/'+lists[i-1])
+                        rmakedirs(self.__FILE_PATH + pre + '/' + lists[i-1])
+                        self.resolveEntries(self.__SVN_HOST + pre + '/' + lists[i-1] + '/.svn/entries', pre + '/' + lists[i-1])
                     else:
-                        rmakedirs(self.__FILE_PATH+lists[i-1])
-                        self.resolveEntries(self.__SVN_HOST+lists[i-1]+'/.svn/entries',lists[i-1])
+                        rmakedirs(self.__FILE_PATH + lists[i-1])
+                        self.resolveEntries(self.__SVN_HOST + lists[i-1] + '/.svn/entries', lists[i-1])
         return
-                        
+                         
     
     def downAllFile(self):
-        rmakedirs(self.__FILE_PATH+'.svn/')
-        rdir(self.__SVN_HOST+'.svn/',self.__FILE_PATH+'.svn/')
+        rmakedirs(self.__FILE_PATH + '.svn/')
+        rdir(self.__SVN_HOST + '.svn/', self.__FILE_PATH + '.svn/')
     
     def toFuck(self):
         '''Start'''
@@ -211,14 +207,14 @@ class SvnFuck(object):
             for i in lists:
                 self.downFile(i)
         else:
-            self.resolveEntries(self.__SVN_HOST+'.svn/entries')
-        cprint('[+] All file downloads completed.','blue')
-        cprint('[?] Do you want to continue downloading all files under /.svn/ (Y/N)','yellow')
-        flag = raw_input().strip().lower()
+            self.resolveEntries(self.__SVN_HOST + '.svn/entries')
+        cprint('[+] All file downloads completed.', 'blue')
+        cprint('[?] Do you want to continue downloading all files under /.svn/ (Y/N)', 'yellow')
+        flag = input().strip().lower()  # Python 3 fix for raw_input()
         if flag == 'y' or flag == 'yes':
-            cprint('[+] Start downloading...Please wait on.','cyan')
+            cprint('[+] Start downloading...Please wait on.', 'cyan')
             self.downAllFile()
-            cprint('[+] All file downloads comleted.','blue')
+            cprint('[+] All file downloads comleted.', 'blue')
         return
 
 if __name__ == '__main__':
@@ -227,4 +223,4 @@ if __name__ == '__main__':
         svnFuck.toFuck()
     else:
         cprint('[!] Parameter Error, Please input correct parameters.', 'red')
-        cprint('[-] Example: python {} http://example.com/.svn/'.format((sys.argv[0])), 'red')
+        cprint('[-] Example: python {} http://example.com/.svn/'.format(sys.argv[0]), 'red')
